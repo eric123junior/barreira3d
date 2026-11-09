@@ -1,6 +1,7 @@
 import { newState, applyAction, isLegal, pawnMoves, checkWall, replay, pathLength, wallSet, goalRow, WALLS_PER_PLAYER } from './rules.js';
 import { GameScene } from './scene.js';
 import { Net, randomRoomCode } from './net.js';
+import { chooseAction } from './ai.js';
 
 const $ = id => document.getElementById(id);
 const scene = new GameScene($('game'));
@@ -34,7 +35,7 @@ const sfx = {
 
 // ---------- Estado da aplicação ----------
 const app = {
-  mode: 'menu',        // menu | tutorial | local | online
+  mode: 'menu',        // menu | tutorial | local | bot | online
   state: newState(0),
   seats: [],           // assentos controlados por este aparelho
   names: ['Azul', 'Vermelho'],
@@ -55,7 +56,7 @@ function toast(msg, bad = false) {
 
 function show(id, on = true) { $(id).classList.toggle('hidden', !on); }
 function showScreen(id) {
-  for (const s of ['menu', 'lobby', 'endScreen']) show(s, s === id);
+  for (const s of ['menu', 'botMenu', 'lobby', 'endScreen']) show(s, s === id);
   const inGame = !id || id === 'endScreen';
   show('hud', inGame); show('topbtns', inGame); show('actions', inGame);
 }
@@ -79,7 +80,8 @@ function refresh() {
   let turnTxt;
   if (s.winner >= 0) turnTxt = 'Fim de jogo';
   else if (app.mode === 'local') turnTxt = 'Vez do ' + app.names[s.turn];
-  else turnTxt = app.seats.includes(s.turn) ? 'Sua vez!' : 'Vez do oponente';
+  else if (app.seats.includes(s.turn)) turnTxt = 'Sua vez!';
+  else turnTxt = app.mode === 'bot' ? 'Robô pensando…' : 'Vez do oponente';
   $('turn').textContent = turnTxt;
   $('turn').style.background = s.winner >= 0 ? '' : (s.turn === 0 ? 'var(--blue)' : 'var(--red)');
 
@@ -103,6 +105,7 @@ function refresh() {
   if (mine && app.tool === 'move') hint = 'Clique numa casa brilhante para andar';
   if (mine && app.tool === 'wall') hint = isTouch ? 'Toque para ver o muro, toque de novo para colocar' : 'Clique para colocar • R ou botão direito para girar';
   if (!mine && app.mode === 'online' && s.winner < 0) hint = 'Aguardando a jogada do oponente…';
+  if (!mine && app.mode === 'bot' && s.winner < 0) hint = '🤖 O Robô está pensando…';
   $('hint').textContent = hint;
 }
 
@@ -144,6 +147,7 @@ function doAction(a, fromNet = false) {
   refresh();
   if (app.state.winner >= 0) onWin();
   else if (app.mode === 'local') setTimeout(() => scene.setView(app.state.turn), 500);
+  else if (app.mode === 'bot') bot.play();
   tutorial.afterAction(a, prev.turn);
   return true;
 }
@@ -152,12 +156,13 @@ function onWin() {
   const w = app.state.winner;
   setTimeout(() => scene.celebrate(w), 450);
   if (app.mode === 'tutorial') return;
-  const iWon = app.seats.includes(w) && app.mode === 'online';
-  (app.mode === 'online' && !iWon) ? sfx.lose() : sfx.win();
+  const vsSomeone = app.mode === 'online' || app.mode === 'bot';
+  const iWon = vsSomeone && app.seats.includes(w);
+  (vsSomeone && !iWon) ? sfx.lose() : sfx.win();
   setTimeout(() => {
     if (app.mode === 'menu') return;
-    if (app.mode === 'online') {
-      $('endTitle').textContent = iWon ? 'Você venceu! 🎉' : app.names[w] + ' venceu!';
+    if (vsSomeone) {
+      $('endTitle').textContent = iWon ? 'Você venceu! 🎉' : (app.mode === 'bot' ? 'O Robô venceu!' : app.names[w] + ' venceu!');
       $('endSub').textContent = iWon ? 'Mandou bem!' : 'Na próxima você consegue!';
     } else {
       $('endTitle').textContent = app.names[w] + ' venceu! 🎉';
@@ -378,6 +383,40 @@ function startLocal() {
 }
 $('btnLocal').onclick = startLocal;
 
+// ---------- Contra o robô ----------
+const LEVEL_NAMES = { facil: 'Fácil', medio: 'Médio', dificil: 'Difícil' };
+const bot = {
+  level: 'medio', starter: 0, token: 0,
+  start(level) {
+    this.level = level;
+    this.token++;
+    app.mode = 'bot';
+    app.seats = [0];
+    app.names = [($('playerName').value.trim() || 'Você').slice(0, 14), 'Robô (' + LEVEL_NAMES[level] + ')'];
+    app.state = newState(this.starter);
+    app.tool = 'move';
+    scene.sync(app.state, false);
+    scene.setView(0);
+    showScreen(null);
+    setNet('');
+    refresh();
+    toast(this.starter === 0 ? 'Você começa!' : 'O Robô começa!');
+    this.play();
+  },
+  play() {
+    if (app.mode !== 'bot' || app.state.winner >= 0 || app.state.turn !== 1) return;
+    const token = this.token, n = app.state.history.length;
+    setTimeout(() => {
+      if (app.mode !== 'bot' || token !== this.token || app.state.history.length !== n) return;
+      const a = chooseAction(app.state, 1, this.level);
+      if (a) doAction(a, true);
+    }, 650 + Math.random() * 500);
+  },
+};
+$('btnBot').onclick = () => { saveName(); showScreen('botMenu'); };
+$('btnBotBack').onclick = () => showScreen('menu');
+for (const b of document.querySelectorAll('button.level')) b.onclick = () => { bot.starter = 0; bot.start(b.dataset.level); };
+
 // ---------- Online ----------
 const online = {
   net: null, role: null, code: '', peer: null, joined: false,
@@ -558,6 +597,7 @@ $('btnLobbyBack').onclick = () => goMenu();
 
 $('btnRematch').onclick = () => {
   if (app.mode === 'online') online.requestRematch();
+  else if (app.mode === 'bot') { bot.starter = 1 - bot.starter; bot.start(bot.level); }
   else { localStarter = 1 - localStarter; startLocal(); }
 };
 $('btnEndMenu').onclick = () => goMenu();
@@ -566,6 +606,7 @@ function saveName() { try { localStorage.setItem('b3d_name', $('playerName').val
 
 function goMenu() {
   online.stop();
+  bot.token++;
   app.mode = 'menu';
   app.seats = [];
   show('tutorial', false);
@@ -601,4 +642,4 @@ if (salaParam.length === 5) {
 refresh();
 
 // Acesso para depuração no console
-window.b3d = { app, tutorial, online, scene, doAction };
+window.b3d = { app, tutorial, online, bot, scene, doAction };

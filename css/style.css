@@ -29,6 +29,9 @@ button:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0,0,0,.18);
 button:disabled { opacity: .5; cursor: default; }
 button.primary { background: #ffcb2e; }
 button.ghost { background: #eef2f8; }
+button.level[data-level="facil"] { background: #c9f2c4; }
+button.level[data-level="medio"] { background: #ffe9a8; }
+button.level[data-level="dificil"] { background: #ffc4bd; }
 button.big { width: 100%; font-size: 1.15rem; padding: 12px 16px; margin-top: 10px; }
 button.small { font-size: .95rem; padding: 6px 12px; }
 
