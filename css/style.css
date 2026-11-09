@@ -32,6 +32,10 @@ button.ghost { background: #eef2f8; }
 button.level[data-level="facil"] { background: #c9f2c4; }
 button.level[data-level="medio"] { background: #ffe9a8; }
 button.level[data-level="dificil"] { background: #ffc4bd; }
+button.level[data-level="impossivel"] {
+  background: linear-gradient(135deg, #2b1033, #6b0f1a); color: #fff; letter-spacing: 1px;
+  box-shadow: 0 4px 0 #1a0510, 0 0 18px rgba(255, 40, 60, .45);
+}
 button.big { width: 100%; font-size: 1.15rem; padding: 12px 16px; margin-top: 10px; }
 button.small { font-size: .95rem; padding: 6px 12px; }
 

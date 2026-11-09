@@ -384,7 +384,7 @@ function startLocal() {
 $('btnLocal').onclick = startLocal;
 
 // ---------- Contra o robô ----------
-const LEVEL_NAMES = { facil: 'Fácil', medio: 'Médio', dificil: 'Difícil' };
+const LEVEL_NAMES = { facil: 'Fácil', medio: 'Médio', dificil: 'Difícil', impossivel: 'IMPOSSÍVEL' };
 const bot = {
   level: 'medio', starter: 0, token: 0,
   start(level) {
@@ -403,14 +403,37 @@ const bot = {
     toast(this.starter === 0 ? 'Você começa!' : 'O Robô começa!');
     this.play();
   },
-  play() {
+  worker: null, reqId: 0,
+  think(state, level) {
+    // Pensa em segundo plano (Web Worker); se não der, pensa aqui mesmo
+    return new Promise(resolve => {
+      try {
+        if (!this.worker) {
+          this.worker = new Worker(new URL('./ai-worker.js', import.meta.url), { type: 'module' });
+          this.worker.onmessage = e => { const cb = this.pending[e.data.id]; delete this.pending[e.data.id]; cb && cb(e.data.action); };
+          this.pending = {};
+        }
+        const id = ++this.reqId;
+        this.pending[id] = resolve;
+        this.worker.postMessage({ id, state, me: 1, level });
+      } catch {
+        resolve(chooseAction(state, 1, level));
+      }
+    });
+  },
+  async play() {
     if (app.mode !== 'bot' || app.state.winner >= 0 || app.state.turn !== 1) return;
     const token = this.token, n = app.state.history.length;
+    const t0 = performance.now();
+    const a = await this.think(app.state, this.level);
+    const wait = Math.max(0, 650 + Math.random() * 400 - (performance.now() - t0));
     setTimeout(() => {
       if (app.mode !== 'bot' || token !== this.token || app.state.history.length !== n) return;
-      const a = chooseAction(app.state, 1, this.level);
-      if (a) doAction(a, true);
-    }, 650 + Math.random() * 500);
+      if (a && !doAction(a, true)) {
+        const b = chooseAction(app.state, 1, 'medio');
+        if (b) doAction(b, true);
+      }
+    }, wait);
   },
 };
 $('btnBot').onclick = () => { saveName(); showScreen('botMenu'); };

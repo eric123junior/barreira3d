@@ -1,5 +1,6 @@
 // Robô adversário: escolhe entre andar e colocar muros avaliando os caminhos mais curtos.
 import { N, DIRS, wallSet, isBlocked, pawnMoves, checkWall, applyAction, goalRow, pathLength } from './rules.js';
+import { searchBest } from './engine.js';
 
 // Caminho mais curto (lista de casas) até a linha de chegada, ignorando peões.
 function shortestPath(ws, from, target) {
@@ -92,6 +93,10 @@ function bestBy(list, score) {
 }
 
 export function chooseAction(s, me, level = 'medio') {
+  // Níveis fortes usam o motor de busca
+  if (level === 'impossivel') return searchBest(s, me, 3000, 10);
+  if (level === 'dificil') return searchBest(s, me, 1000, 4);
+
   const ws = wallSet(s.walls);
   const moves = actions(s, me, false);
   const stepScore = a => {
@@ -115,11 +120,11 @@ export function chooseAction(s, me, level = 'medio') {
   for (const a of moves) if (applyAction(s, a).winner === me) return a;
 
   // Médio: na maioria das vezes pensa como o difícil, mas às vezes joga sem prever a resposta
-  if (level === 'medio' && Math.random() < 0.6) {
+  if (level === 'medio' && Math.random() < 0.25) {
     return bestBy(all, a => evaluate(applyAction(s, a), me) + Math.random() * 0.3);
   }
 
-  // Difícil: olha a melhor resposta do adversário (2 jogadas)
+  // Médio: olha a melhor resposta do adversário (2 jogadas)
   const opp = 1 - me;
   return bestBy(all, a => {
     const n = applyAction(s, a);
