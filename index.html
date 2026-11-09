@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Barreira 3D</title>
+  <meta name="description" content="Jogo de tabuleiro 3D de estratégia: chegue ao outro lado e bloqueie o adversário com muros. Jogue online com um amigo.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧱</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="game"></div>
+
+  <!-- HUD do jogo -->
+  <div id="hud" class="hidden">
+    <div class="player-card" id="card0">
+      <span class="dot"></span>
+      <div><div class="pname" id="name0">Azul</div><div class="bricks" id="bricks0"></div></div>
+    </div>
+    <div id="turn">Sua vez</div>
+    <div class="player-card right" id="card1">
+      <div><div class="pname" id="name1">Vermelho</div><div class="bricks" id="bricks1"></div></div>
+      <span class="dot"></span>
+    </div>
+  </div>
+  <div id="topbtns" class="hidden">
+    <button id="btnExit" class="small" title="Sair para o menu">☰ Menu</button>
+    <button id="btnCam" class="small" title="Recentralizar câmera">🎥</button>
+    <button id="btnSound" class="small" title="Som">🔊</button>
+    <span id="netStatus"></span>
+  </div>
+
+  <div id="actions" class="hidden">
+    <button id="toolMove" class="tool active">🚶 Andar</button>
+    <button id="toolWall" class="tool">🧱 Muro</button>
+    <button id="btnRotate" class="tool">↻ Girar</button>
+  </div>
+  <div id="hint"></div>
+  <div id="toast"></div>
+
+  <!-- Menu -->
+  <div id="menu" class="screen">
+    <div class="panel">
+      <h1>Barreira <span>3D</span></h1>
+      <p class="sub">Chegue ao outro lado… e bloqueie o caminho do adversário!</p>
+      <label class="field">Seu nome
+        <input id="playerName" maxlength="14" placeholder="Jogador" autocomplete="off">
+      </label>
+      <button id="btnCreate" class="big primary">🌐 Criar sala online</button>
+      <div class="join-row">
+        <input id="roomInput" maxlength="5" placeholder="CÓDIGO" autocomplete="off">
+        <button id="btnJoin" class="big">Entrar</button>
+      </div>
+      <button id="btnLocal" class="big ghost">👥 2 jogadores no mesmo aparelho</button>
+      <button id="btnTutorial" class="big ghost">📖 Como jogar (tutorial)</button>
+    </div>
+  </div>
+
+  <!-- Sala de espera -->
+  <div id="lobby" class="screen hidden">
+    <div class="panel">
+      <h2 id="lobbyTitle">Sala criada!</h2>
+      <p>Envie este código para seu amigo:</p>
+      <div id="roomCode">-----</div>
+      <button id="btnCopy" class="big primary">📋 Copiar link de convite</button>
+      <p class="waiting"><span class="spinner"></span> <span id="lobbyStatus">Conectando…</span></p>
+      <button id="btnLobbyBack" class="big ghost">Cancelar</button>
+    </div>
+  </div>
+
+  <!-- Tutorial -->
+  <div id="tutorial" class="hidden">
+    <div class="tut-step" id="tutStep">1/8</div>
+    <div class="tut-text" id="tutText"></div>
+    <div class="tut-btns">
+      <button id="tutSkip" class="small ghost">Pular tutorial</button>
+      <button id="tutNext" class="small primary">Próximo ▶</button>
+    </div>
+  </div>
+
+  <!-- Fim de jogo -->
+  <div id="endScreen" class="screen hidden">
+    <div class="panel">
+      <div class="trophy">🏆</div>
+      <h2 id="endTitle">Você venceu!</h2>
+      <p id="endSub"></p>
+      <button id="btnRematch" class="big primary">🔁 Jogar de novo</button>
+      <button id="btnEndMenu" class="big ghost">Menu</button>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

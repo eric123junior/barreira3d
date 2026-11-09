@@ -1,0 +1,153 @@
+:root {
+  --blue: #2f7cf6;
+  --red: #f0503c;
+  --ink: #1d2433;
+  --panel: rgba(255, 255, 255, 0.94);
+  --muted: #5d6779;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; height: 100%; overflow: hidden;
+  font-family: 'Baloo 2', system-ui, sans-serif;
+  color: var(--ink);
+  background: #9fd3f5;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+#game { position: fixed; inset: 0; }
+#game canvas { display: block; touch-action: none; }
+.hidden { display: none !important; }
+
+button {
+  font-family: inherit; font-weight: 700; cursor: pointer;
+  border: none; border-radius: 14px; color: var(--ink);
+  background: #fff; box-shadow: 0 4px 0 rgba(0,0,0,.18);
+  transition: transform .08s, box-shadow .08s, background .15s;
+}
+button:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0,0,0,.18); }
+button:disabled { opacity: .5; cursor: default; }
+button.primary { background: #ffcb2e; }
+button.ghost { background: #eef2f8; }
+button.big { width: 100%; font-size: 1.15rem; padding: 12px 16px; margin-top: 10px; }
+button.small { font-size: .95rem; padding: 6px 12px; }
+
+/* Telas */
+.screen {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 50% 30%, rgba(255,255,255,.15), rgba(10,30,60,.45));
+  padding: 16px; z-index: 20;
+}
+.panel {
+  background: var(--panel); border-radius: 24px; padding: 26px 24px 22px;
+  width: 100%; max-width: 400px; text-align: center;
+  box-shadow: 0 18px 50px rgba(0,0,0,.25);
+  animation: pop .35s ease-out;
+}
+@keyframes pop { from { transform: scale(.9); opacity: 0; } }
+h1 { margin: 0; font-size: 3rem; line-height: 1; font-weight: 800; letter-spacing: -1px; }
+h1 span { color: var(--red); }
+h2 { margin: 0 0 6px; font-size: 1.8rem; }
+.sub { color: var(--muted); margin: 6px 0 14px; }
+.field { display: block; text-align: left; font-weight: 700; color: var(--muted); font-size: .9rem; }
+input {
+  font-family: inherit; font-size: 1.15rem; font-weight: 700; width: 100%;
+  padding: 10px 14px; border-radius: 12px; border: 2px solid #d8deea; margin-top: 4px;
+  outline: none; color: var(--ink); background: #fff;
+}
+input:focus { border-color: var(--blue); }
+.join-row { display: flex; gap: 8px; }
+.join-row input { text-transform: uppercase; letter-spacing: 4px; text-align: center; margin-top: 10px; }
+.join-row button { width: auto; flex: 0 0 auto; }
+#roomCode {
+  font-size: 3rem; font-weight: 800; letter-spacing: 10px; color: var(--blue);
+  background: #eef4ff; border-radius: 16px; padding: 6px 0 2px; margin: 6px 0;
+  user-select: all;
+}
+.waiting { color: var(--muted); display: flex; gap: 8px; align-items: center; justify-content: center; }
+.spinner {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 3px solid #cbd5e6; border-top-color: var(--blue); animation: spin 0.9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.trophy { font-size: 4rem; line-height: 1; animation: bounce 1s ease-in-out infinite; }
+@keyframes bounce { 50% { transform: translateY(-10px); } }
+
+/* HUD */
+#hud {
+  position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px; z-index: 5;
+  width: min(640px, calc(100% - 20px));
+}
+.player-card {
+  flex: 1; display: flex; align-items: center; gap: 8px;
+  background: var(--panel); border-radius: 16px; padding: 6px 12px;
+  box-shadow: 0 4px 14px rgba(0,0,0,.15); min-width: 0;
+  border: 3px solid transparent; transition: border-color .2s, transform .2s;
+}
+.player-card.right { justify-content: flex-end; text-align: right; }
+.player-card.active { transform: scale(1.04); }
+#card0.active { border-color: var(--blue); }
+#card1.active { border-color: var(--red); }
+.dot { width: 16px; height: 16px; border-radius: 50%; flex: 0 0 auto; }
+#card0 .dot { background: var(--blue); }
+#card1 .dot { background: var(--red); }
+.pname { font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.1; }
+.bricks { display: flex; gap: 2px; margin-top: 3px; flex-wrap: wrap; }
+.player-card.right .bricks { justify-content: flex-end; }
+.bricks i { width: 7px; height: 12px; border-radius: 2px; background: #c98b4f; display: inline-block; }
+.bricks i.used { background: #dde2ea; }
+#turn {
+  flex: 0 0 auto; background: var(--ink); color: #fff; font-weight: 800;
+  padding: 8px 14px; border-radius: 14px; white-space: nowrap; font-size: 1rem;
+}
+#topbtns { position: fixed; left: 10px; bottom: 10px; display: flex; gap: 6px; z-index: 6; align-items: center; }
+#netStatus { font-size: .85rem; font-weight: 700; background: var(--panel); padding: 4px 10px; border-radius: 10px; }
+#netStatus:empty { display: none; }
+
+#actions {
+  position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 8px; z-index: 5;
+}
+.tool { font-size: 1.1rem; padding: 10px 16px; white-space: nowrap; }
+.tool.active { background: #ffcb2e; }
+#hint {
+  position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%);
+  background: rgba(29, 36, 51, .8); color: #fff; padding: 4px 12px; border-radius: 10px;
+  font-size: .9rem; z-index: 5; pointer-events: none; white-space: nowrap;
+}
+#hint:empty { display: none; }
+#toast {
+  position: fixed; top: 80px; left: 50%; transform: translateX(-50%) translateY(-10px);
+  background: #fff; padding: 8px 16px; border-radius: 12px; font-weight: 700;
+  box-shadow: 0 6px 20px rgba(0,0,0,.2); opacity: 0; transition: .25s; z-index: 30;
+  pointer-events: none; max-width: calc(100% - 32px); text-align: center;
+}
+#toast.show { opacity: 1; transform: translateX(-50%); }
+#toast.bad { background: #ffe3e0; color: #a0221a; }
+
+/* Tutorial */
+#tutorial {
+  position: fixed; top: 74px; left: 50%; transform: translateX(-50%);
+  width: min(560px, calc(100% - 20px)); background: var(--panel); border-radius: 18px;
+  padding: 12px 16px; z-index: 10; box-shadow: 0 10px 30px rgba(0,0,0,.25);
+  border-left: 6px solid var(--blue); animation: pop .3s ease-out;
+}
+.tut-step { font-size: .8rem; font-weight: 800; color: var(--blue); }
+.tut-text { font-size: 1.05rem; line-height: 1.35; margin: 2px 0 8px; }
+.tut-text b { color: var(--blue); }
+.tut-text .r { color: var(--red); }
+.tut-btns { display: flex; justify-content: space-between; gap: 8px; }
+
+@media (max-width: 560px) {
+  h1 { font-size: 2.4rem; }
+  #turn { font-size: .85rem; padding: 6px 8px; }
+  .player-card { padding: 4px 8px; }
+  .pname { font-size: .9rem; }
+  .bricks i { width: 5px; height: 9px; }
+  .tool { font-size: .9rem; padding: 9px 10px; }
+  #actions { gap: 6px; }
+  #topbtns { bottom: auto; top: 70px; }
+  #tutorial { top: 112px; }
+  .tut-text { font-size: .95rem; }
+  #hint { bottom: 64px; font-size: .8rem; }
+}
