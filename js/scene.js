@@ -304,7 +304,10 @@ export class GameScene {
   setView(p, instant = false) {
     this.view = p;
     const k = (this.camDist || 16) / 15.9;
-    const target = new THREE.Vector3(0, 11.5 * k, (p === 0 ? 11 : -11) * k);
+    const side = p === 0 ? 1 : -1;
+    const target = new THREE.Vector3(0, 11.5 * k, 11 * k * side);
+    // Na tela em pé, olha um pouco além do centro para o tabuleiro descer e não ficar atrás dos painéis
+    this.controls.target.set(0, 0, -side * (this.portrait ? 2 : 0));
     if (instant) {
       this.camera.position.copy(target);
       this.controls.update();
@@ -319,6 +322,8 @@ export class GameScene {
     this.camera.aspect = w / h;
     // Em telas estreitas, afasta a câmera
     const aspect = w / h;
+    const wasPortrait = this.portrait;
+    this.portrait = aspect < 0.8;
     this.camera.fov = aspect < 0.8 ? 58 : 45;
     this.camera.updateProjectionMatrix();
     // Distância para o tabuleiro inteiro caber na largura da tela
@@ -326,7 +331,7 @@ export class GameScene {
     const prev = this.camDist;
     this.camDist = Math.max(16, 5.7 / (halfH * aspect));
     this.controls.maxDistance = Math.max(22, this.camDist + 4);
-    if (prev && Math.abs(prev - this.camDist) > 0.5) this.setView(this.view, true);
+    if (prev && (Math.abs(prev - this.camDist) > 0.5 || wasPortrait !== this.portrait)) this.setView(this.view, true);
   }
 
   // Sincroniza a cena com o estado do jogo
