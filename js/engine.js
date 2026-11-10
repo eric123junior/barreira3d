@@ -242,8 +242,14 @@ class Search {
 
   negamax(depth, alpha, beta, ply, rootOrder) {
     if ((++this.nodes & 255) === 0 && performance.now() > this.deadline) throw ABORT;
-    if (depth === 0) return this.evaluate();
     const b = this.b;
+    if (ply > 0) {
+      // Quem está na última linha passa a barreira na sua vez (ninguém consegue impedir)
+      const t = b.turn;
+      if (((b.pos[t] / N) | 0) === goalRow(t)) return WIN - ply;
+      if (((b.pos[1 - t] / N) | 0) === goalRow(1 - t)) return -(WIN - ply - 1);
+    }
+    if (depth === 0) return this.evaluate();
     const alpha0 = alpha;
     const k = ply > 0 ? this.key() : 0;
     let ttMove = null;
@@ -258,7 +264,6 @@ class Search {
         ttMove = e.move;
       }
     }
-    const p = b.turn;
     const acts = rootOrder || this.actions(ply);
     if (ttMove) {
       const i = acts.findIndex(a => this.same(a, ttMove));
@@ -269,12 +274,9 @@ class Search {
       let v;
       // Na raiz: evita ficar indo e voltando e prefere avançar
       const pen = ply === 0 ? this.rootPenalty(a) : 0;
-      if (a.k === 'm' && ((a.to / N) | 0) === goalRow(p)) v = WIN - ply;
-      else {
-        this.make(a);
-        v = -this.negamax(depth - 1, -beta, -(alpha + pen), ply + 1, null) - pen;
-        this.unmake(a);
-      }
+      this.make(a);
+      v = -this.negamax(depth - 1, -beta, -(alpha + pen), ply + 1, null) - pen;
+      this.unmake(a);
       if (ply === 0) a.score = v;
       if (v > best) { best = v; bestA = a; }
       if (v > alpha) alpha = v;
@@ -321,9 +323,9 @@ export function searchBest(state, me, timeMs = 1500, maxDepth = 12) {
 export function analyze(state, me, depth) {
   const s = new Search(state, me, Infinity);
   return s.actions(0).map(a => {
-    let v;
-    if (a.k === 'm' && ((a.to / N) | 0) === goalRow(me)) v = WIN;
-    else { s.make(a); v = -s.negamax(depth - 1, -INF, INF, 1, null); s.unmake(a); }
+    s.make(a);
+    const v = -s.negamax(depth - 1, -INF, INF, 1, null);
+    s.unmake(a);
     return [JSON.stringify(toAction(a)), v];
   }).sort((x, y) => y[1] - x[1]);
 }

@@ -33,6 +33,8 @@ export function cloneState(s) {
 }
 
 export const goalRow = p => (p === 0 ? 0 : N - 1);
+// Para vencer é preciso passar da barreira: da última linha, dar mais um passo para fora do tabuleiro.
+export const exitRow = p => (p === 0 ? -1 : N);
 const inside = (r, c) => r >= 0 && r < N && c >= 0 && c < N;
 const key = (o, r, c) => o + r + ',' + c;
 
@@ -55,6 +57,7 @@ export function isBlocked(ws, r, c, dr, dc) {
 export function pawnMoves(s, p, ws = wallSet(s.walls)) {
   const me = s.pawns[p], op = s.pawns[1 - p];
   const out = [];
+  if (me.r === goalRow(p)) out.push({ r: exitRow(p), c: me.c, kind: 'exit' });
   for (const [dr, dc] of DIRS) {
     const r = me.r + dr, c = me.c + dc;
     if (!inside(r, c) || isBlocked(ws, me.r, me.c, dr, dc)) continue;
@@ -131,7 +134,7 @@ export function applyAction(s, a) {
   const p = n.turn;
   if (a.k === 'm') {
     n.pawns[p] = { r: a.r, c: a.c };
-    if (a.r === goalRow(p)) n.winner = p;
+    if (a.r === exitRow(p)) n.winner = p;
   } else {
     n.walls.push({ r: a.r, c: a.c, o: a.o, p });
     n.wallsLeft[p]--;

@@ -195,6 +195,7 @@ export class GameScene {
     this.setView(0, true);
 
     window.addEventListener('resize', () => this.resize());
+    if (window.ResizeObserver) new ResizeObserver(() => this.resize()).observe(container);
     this.renderer.setAnimationLoop(() => this.tick());
   }
 
@@ -265,12 +266,40 @@ export class GameScene {
     base.position.y = -0.175;
     base.receiveShadow = true; base.castShadow = true;
     this.scene.add(base);
-    // Faixas coloridas atrás das linhas de chegada
+    // Zonas de chegada além da barreira: para vencer, o boneco precisa pisar aqui
     for (let p = 0; p < 2; p++) {
-      const strip = new THREE.Mesh(new THREE.BoxGeometry(N * S + 0.6, 0.36, 0.25),
-        new THREE.MeshStandardMaterial({ color: COLORS[p], roughness: 0.5 }));
-      strip.position.set(0, -0.17, p === 0 ? -(N * S + 0.6) / 2 - 0.12 : (N * S + 0.6) / 2 + 0.12);
-      this.scene.add(strip);
+      const side = p === 0 ? -1 : 1;
+      const cv = document.createElement('canvas');
+      cv.width = 288; cv.height = 32;
+      const g = cv.getContext('2d');
+      const col = '#' + new THREE.Color(COLORS[p]).getHexString();
+      for (let x = 0; x < 36; x++) for (let y = 0; y < 4; y++) {
+        g.fillStyle = (x + y) % 2 ? '#ffffff' : col;
+        g.fillRect(x * 8, y * 8, 8, 8);
+      }
+      const tex = new THREE.CanvasTexture(cv);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const top = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6 });
+      const sideMat = new THREE.MeshStandardMaterial({ color: COLORS[p], roughness: 0.5 });
+      const zone = new THREE.Mesh(new THREE.BoxGeometry(N * S + 0.6, TOP + 0.35, 1.0),
+        [sideMat, sideMat, top, sideMat, sideMat, sideMat]);
+      zone.position.set(0, (TOP - 0.35) / 2, side * ((N * S + 0.6) / 2 + 0.5));
+      zone.receiveShadow = true;
+      this.scene.add(zone);
+      // Postes com bandeirinhas nas pontas da chegada
+      for (const sx of [-1, 1]) {
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.3, 10),
+          new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 }));
+        post.position.set(sx * ((N * S + 0.6) / 2 - 0.05), TOP + 0.65, side * ((N * S + 0.6) / 2 + 0.5));
+        post.castShadow = true;
+        this.scene.add(post);
+        const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.32),
+          new THREE.MeshStandardMaterial({ color: COLORS[p], side: THREE.DoubleSide, roughness: 0.6 }));
+        flag.position.set(post.position.x - sx * 0.25, TOP + 1.12, post.position.z);
+        this.scene.add(flag);
+        this.flags = this.flags || [];
+        this.flags.push(flag);
+      }
     }
 
     const tileGeo = new THREE.BoxGeometry(TILE, TILE_H, TILE);
@@ -318,6 +347,7 @@ export class GameScene {
 
   resize() {
     const w = this.container.clientWidth, h = this.container.clientHeight;
+    if (!w || !h) return; // aba escondida: espera ter tamanho de verdade
     this.renderer.setSize(w, h);
     this.camera.aspect = w / h;
     // Em telas estreitas, afasta a câmera
@@ -331,7 +361,7 @@ export class GameScene {
     const prev = this.camDist;
     this.camDist = Math.max(16, 5.7 / (halfH * aspect));
     this.controls.maxDistance = Math.max(22, this.camDist + 4);
-    if (prev && (Math.abs(prev - this.camDist) > 0.5 || wasPortrait !== this.portrait)) this.setView(this.view, true);
+    if (!prev || Math.abs(prev - this.camDist) > 0.5 || wasPortrait !== this.portrait || !Number.isFinite(this.camera.position.x)) this.setView(this.view, true);
   }
 
   // Sincroniza a cena com o estado do jogo
@@ -403,6 +433,30 @@ export class GameScene {
       this.hlGroup.add(h);
       this.highlights.push(h);
     }
+  }
+
+  // Destaca a casa sob o mouse
+  setHover(m) {
+    for (const h of this.highlights) {
+      const on = m && h.userData.r === m.r && h.userData.c === m.c;
+      h.scale.setScalar(on ? 1.35 : 1);
+    }
+  }
+
+  // Objeto clicado: pilha de muros de um jogador ou um boneco
+  pickObject(clientX, clientY) {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const v = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+    this.raycaster.setFromCamera(v, this.camera);
+    const targets = [...this.pawns, ...this.stock[0].filter(m => !m.userData.used), ...this.stock[1].filter(m => !m.userData.used)];
+    const hit = this.raycaster.intersectObjects(targets, true)[0];
+    if (!hit) return null;
+    for (let p = 0; p < 2; p++) {
+      let o = hit.object;
+      while (o) { if (o === this.pawns[p]) return { pawn: p }; o = o.parent; }
+      if (this.stock[p].includes(hit.object)) return { stock: p };
+    }
+    return null;
   }
 
   showGhost(w, ok) {
@@ -530,6 +584,8 @@ export class GameScene {
       }
       return true;
     });
+
+    if (this.flags) for (const f of this.flags) f.rotation.y = Math.sin(t * 3 + f.position.x) * 0.35;
 
     for (const c of this.clouds) {
       const a = Math.atan2(c.position.z, c.position.x) + dt * 0.01 * c.userData.speed;

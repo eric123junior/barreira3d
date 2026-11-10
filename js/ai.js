@@ -1,5 +1,5 @@
 // Robô adversário: escolhe entre andar e colocar muros avaliando os caminhos mais curtos.
-import { N, DIRS, wallSet, isBlocked, pawnMoves, checkWall, applyAction, goalRow, pathLength } from './rules.js';
+import { N, DIRS, wallSet, isBlocked, pawnMoves, checkWall, applyAction, goalRow, exitRow, pathLength } from './rules.js';
 import { searchBest } from './engine.js';
 
 // Caminho mais curto (lista de casas) até a linha de chegada, ignorando peões.
@@ -93,6 +93,8 @@ function bestBy(list, score) {
 }
 
 export function chooseAction(s, me, level = 'medio') {
+  // Já está na última linha: passa a barreira e vence
+  if (s.pawns[me].r === goalRow(me)) return { k: 'm', r: exitRow(me), c: s.pawns[me].c };
   // Níveis fortes usam o motor de busca
   if (level === 'impossivel') return searchBest(s, me, 3000, 10);
   if (level === 'dificil') return searchBest(s, me, 1000, 4);

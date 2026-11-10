@@ -1,4 +1,4 @@
-import { newState, applyAction, isLegal, pawnMoves, checkWall, replay, pathLength, wallSet, goalRow, WALLS_PER_PLAYER } from './rules.js';
+import { newState, applyAction, isLegal, pawnMoves, checkWall, replay, pathLength, wallSet, goalRow, exitRow, WALLS_PER_PLAYER } from './rules.js';
 import { GameScene } from './scene.js';
 import { Net, randomRoomCode } from './net.js';
 import { chooseAction } from './ai.js';
@@ -98,12 +98,25 @@ function refresh() {
     const moves = pawnMoves(s, s.turn).filter(m => tutorial.allowMove(m));
     scene.showMoves(moves, m => m.kind !== 'step');
   } else scene.showMoves([]);
-  if (!mine || app.tool !== 'wall') { scene.showGhost(null); app.pending = null; }
-  else if (app.lastPick) updateGhost(app.lastPick);
+  if (!mine || app.tool !== 'wall') { app.pending = null; if (!(tutorial.active() && tutorial.step()?.demo)) scene.showGhost(null); }
+  else if (app.pending) showPending();
+  else if (app.lastPick && !isTouch) updateGhost(app.lastPick);
+  else scene.showGhost(null);
+
+  // Barra de confirmação do muro
+  const wallMode = mine && app.tool === 'wall';
+  show('wallBar', wallMode);
+  if (wallMode) {
+    const chk = app.pending ? wallCheck(app.pending) : null;
+    $('wallMsg').textContent = !app.pending ? (isTouch ? 'Toque entre as casas para escolher o lugar' : 'Clique entre as casas para escolher o lugar')
+      : chk.ok ? 'Muro aqui? Toque em ✔ para colocar' : chk.reason;
+    $('wallMsg').classList.toggle('bad', !!app.pending && !chk.ok);
+    $('btnConfirmWall').disabled = !app.pending || !chk.ok;
+  }
 
   let hint = '';
-  if (mine && app.tool === 'move') hint = 'Clique numa casa brilhante para andar';
-  if (mine && app.tool === 'wall') hint = isTouch ? 'Toque para ver o muro, toque de novo para colocar' : 'Clique para colocar • R ou botão direito para girar';
+  if (mine && app.tool === 'move') hint = isTouch ? 'Toque numa casa brilhante para andar • toque na pilha de muros para pegar um muro'
+    : 'Clique numa casa brilhante ou use as setas ⬆⬇⬅➡ • clique na pilha de muros para pegar um';
   if (!mine && app.mode === 'online' && s.winner < 0) hint = 'Aguardando a jogada do oponente…';
   if (!mine && app.mode === 'bot' && s.winner < 0) hint = '🤖 O Robô está pensando…';
   $('hint').textContent = hint;
@@ -111,21 +124,82 @@ function refresh() {
 
 function setTool(t) {
   if (!canAct()) return;
+  if (t === 'wall' && app.state.wallsLeft[app.state.turn] <= 0) { toast('Você não tem mais muros.', true); return; }
   app.tool = t;
   app.pending = null;
+  scene.setHover(null);
   refresh();
 }
 function rotate() {
   app.orient = app.orient === 'h' ? 'v' : 'h';
-  app.pending = null;
+  if (app.pending) app.pending = { ...app.pending, o: app.orient };
   refresh();
 }
 
+function wallCheck(w) {
+  const chk = checkWall(app.state, app.state.turn, w);
+  if (chk.ok && !tutorial.allowWall(w)) return { ok: false, reason: tutorial.blockMsg() };
+  return chk;
+}
+
+function showPending() {
+  scene.showGhost(app.pending, wallCheck(app.pending).ok);
+}
+
+// Prévia do muro seguindo o mouse (só enquanto nenhum lugar foi escolhido)
 function updateGhost(pick) {
   if (tutorial.active() && tutorial.step()?.demo) return;
+  if (app.pending) { showPending(); return; }
   if (!pick || !canAct() || app.tool !== 'wall' || !pick.inBoard) { scene.showGhost(null); return; }
   const w = { k: 'w', r: pick.anchor.r, c: pick.anchor.c, o: app.orient };
-  scene.showGhost(w, checkWall(app.state, app.state.turn, w).ok && tutorial.allowWall(w));
+  scene.showGhost(w, wallCheck(w).ok);
+}
+
+function choosePending(w) {
+  app.pending = w;
+  refresh();
+}
+
+function confirmWall() {
+  if (!canAct() || app.tool !== 'wall' || !app.pending) return;
+  const chk = wallCheck(app.pending);
+  if (!chk.ok) { sfx.bad(); toast(chk.reason, true); return; }
+  doAction({ ...app.pending });
+}
+
+function cancelWall() {
+  if (app.pending) { app.pending = null; refresh(); }
+  else setTool('move');
+}
+
+// Casa válida mais próxima de um ponto do tabuleiro
+function nearestMove(pick, maxDist = 0.75) {
+  let m = null, best = maxDist;
+  for (const x of pawnMoves(app.state, app.state.turn)) {
+    if (!tutorial.allowMove(x)) continue;
+    const d = Math.hypot(x.r - pick.fr, x.c - pick.fc);
+    if (d < best) { best = d; m = x; }
+  }
+  return m;
+}
+
+// Andar com as setas, de acordo com o lado de onde a câmera olha
+function moveByKey(dr, dc) {
+  if (scene.view === 1) { dr = -dr; dc = -dc; }
+  const me = app.state.pawns[app.state.turn];
+  const m = pawnMoves(app.state, app.state.turn).find(x =>
+    Math.sign(x.r - me.r) === dr && Math.sign(x.c - me.c) === dc);
+  if (!m) { sfx.bad(); return; }
+  if (!tutorial.allowMove(m)) { toast(tutorial.blockMsg(), true); return; }
+  doAction({ k: 'm', r: m.r, c: m.c });
+}
+
+// Mover o muro escolhido com as setas
+function nudgeWall(dr, dc) {
+  if (scene.view === 1) { dr = -dr; dc = -dc; }
+  const p = app.pending;
+  if (!p) { choosePending({ k: 'w', r: 3, c: 3, o: app.orient }); return; }
+  choosePending({ ...p, r: Math.min(7, Math.max(0, p.r + dr)), c: Math.min(7, Math.max(0, p.c + dc)) });
 }
 
 // ---------- Ações ----------
@@ -181,9 +255,22 @@ let down = null;
 canvas.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY, b: e.button }; });
 canvas.addEventListener('pointermove', e => {
   if (e.pointerType === 'touch') return;
-  app.lastPick = scene.pick(e.clientX, e.clientY);
-  updateGhost(app.lastPick);
-  canvas.style.cursor = canAct() ? 'pointer' : 'default';
+  const pick = scene.pick(e.clientX, e.clientY);
+  app.lastPick = pick;
+  let pointer = false;
+  if (canAct()) {
+    const obj = scene.pickObject(e.clientX, e.clientY);
+    if (obj && (obj.stock === app.state.turn || obj.pawn === app.state.turn)) pointer = true;
+    if (app.tool === 'move') {
+      const m = pick && nearestMove(pick);
+      scene.setHover(m);
+      if (m) pointer = true;
+    } else {
+      updateGhost(pick);
+      if (pick && pick.inBoard) pointer = true;
+    }
+  }
+  canvas.style.cursor = pointer ? 'pointer' : 'default';
 });
 canvas.addEventListener('pointerup', e => {
   if (!down) return;
@@ -193,43 +280,45 @@ canvas.addEventListener('pointerup', e => {
   if (moved) return;
   if (button === 2) { if (app.tool === 'wall') rotate(); return; }
   if (button !== 0 || !canAct()) return;
+  // Clicou na própria pilha de muros ou no próprio boneco: troca de ferramenta
+  const obj = scene.pickObject(e.clientX, e.clientY);
+  if (obj && obj.stock === app.state.turn) { setTool('wall'); return; }
+  if (obj && obj.pawn === app.state.turn && app.tool === 'wall') { setTool('move'); return; }
   const pick = scene.pick(e.clientX, e.clientY);
   if (!pick) return;
   app.lastPick = pick;
   if (app.tool === 'move') {
-    // Casa válida mais próxima do clique (tolerante a cliques em cima dos bonecos)
-    let m = null, best = 0.75;
-    for (const x of pawnMoves(app.state, app.state.turn)) {
-      const d = Math.hypot(x.r - pick.fr, x.c - pick.fc);
-      if (d < best) { best = d; m = x; }
-    }
-    if (!m) return;
-    if (!tutorial.allowMove(m)) { toast(tutorial.blockMsg(), true); return; }
+    const m = nearestMove(pick);
+    if (!m) { if (tutorial.active()) toast(tutorial.blockMsg()); return; }
     doAction({ k: 'm', r: m.r, c: m.c });
   } else {
     if (!pick.inBoard) return;
     const w = { k: 'w', r: pick.anchor.r, c: pick.anchor.c, o: app.orient };
-    if (e.pointerType === 'touch') {
-      const p = app.pending;
-      if (!p || p.r !== w.r || p.c !== w.c || p.o !== w.o) {
-        app.pending = w;
-        updateGhost(pick);
-        const chk = checkWall(app.state, app.state.turn, w);
-        if (!chk.ok) toast(chk.reason, true);
-        return;
-      }
-    }
-    if (!tutorial.allowWall(w)) { toast(tutorial.blockMsg(), true); return; }
-    doAction(w);
+    choosePending(w);
+    const chk = wallCheck(w);
+    if (!chk.ok) { sfx.bad(); toast(chk.reason, true); }
+    else beep([440], 0.05, 'sine', 0.08);
   }
 });
 window.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return;
-  if (e.key === 'r' || e.key === 'R') { if (app.tool === 'wall' && canAct()) rotate(); }
-  if (e.key === '1') setTool('move');
-  if (e.key === '2') setTool('wall');
+  const k = e.key;
+  if (k === 'r' || k === 'R') { if (app.tool === 'wall' && canAct()) rotate(); }
+  if (k === '1') setTool('move');
+  if (k === '2') setTool('wall');
+  if (!canAct()) return;
+  const dirs = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1], w: [-1, 0], s: [1, 0], a: [0, -1], d: [0, 1] };
+  const d = dirs[k] || dirs[k.toLowerCase()];
+  if (d) {
+    e.preventDefault();
+    if (app.tool === 'move') moveByKey(d[0], d[1]); else nudgeWall(d[0], d[1]);
+  }
+  if (app.tool === 'wall' && k === 'Enter') { e.preventDefault(); confirmWall(); }
+  if (app.tool === 'wall' && k === 'Escape') cancelWall();
 });
 
+$('btnConfirmWall').onclick = () => confirmWall();
+$('btnCancelWall').onclick = () => cancelWall();
 $('toolMove').onclick = () => setTool('move');
 $('toolWall').onclick = () => setTool('wall');
 $('btnRotate').onclick = () => rotate();
@@ -242,6 +331,7 @@ $('btnExit').onclick = () => {
 
 // ---------- Robô simples (usado no tutorial) ----------
 function botMove(s, p) {
+  if (s.pawns[p].r === goalRow(p)) return { k: 'm', r: exitRow(p), c: s.pawns[p].c };
   const ws = wallSet(s.walls);
   let best = null, bestD = 1e9;
   for (const m of pawnMoves(s, p, ws)) {
@@ -254,18 +344,18 @@ function botMove(s, p) {
 // ---------- Tutorial ----------
 const TUT_STEPS = [
   {
-    text: 'Bem-vindo ao <b>Barreira 3D</b>! Você é o bonequinho <b>AZUL</b>. Seu objetivo é chegar em <b>qualquer casa da linha azul</b>, lá do outro lado do tabuleiro.',
+    text: 'Bem-vindo ao <b>Barreira 3D</b>! Você é o bonequinho <b>AZUL</b>. Seu objetivo é atravessar o tabuleiro e <b>passar da barreira azul</b>: a faixa quadriculada lá do outro lado.',
     setup: () => newState(0),
   },
   {
-    text: 'O adversário <span class="r"><b>VERMELHO</b></span> quer chegar na linha vermelha, do seu lado. <b>Quem chegar primeiro vence!</b> Você pode girar a câmera arrastando com o botão direito (ou dois dedos).',
+    text: 'O adversário <span class="r"><b>VERMELHO</b></span> quer passar da barreira vermelha, do seu lado. <b>Quem passar primeiro vence!</b> Você pode girar a câmera arrastando com o botão direito (ou dois dedos).',
   },
   {
-    text: 'Na sua vez você faz <b>UMA</b> coisa: <b>ANDAR uma casa</b> (frente, trás ou lados) <b>ou COLOCAR UM MURO</b>. Vamos andar: clique em uma <b>casa amarela</b>.',
+    text: 'Na sua vez você faz <b>UMA</b> coisa: <b>ANDAR uma casa</b> (frente, trás ou lados) <b>ou COLOCAR UM MURO</b>. Vamos andar: clique em uma <b>casa amarela</b> (no computador também dá para usar as <b>setas</b> do teclado).',
     wait: 'm',
   },
   {
-    text: 'Os <b>muros</b> atrapalham o caminho do adversário. Cada jogador tem <b>10 muros</b> e cada muro cobre <b>2 casas</b>. Toque em <b>🧱 Muro</b>, escolha um lugar <b>entre as casas</b> e clique. Use <b>↻ Girar</b> para deixá-lo em pé ou deitado.',
+    text: 'Os <b>muros</b> atrapalham o caminho do adversário. Cada jogador tem <b>10 muros</b> e cada muro cobre <b>2 casas</b>. Toque em <b>🧱 Muro</b> (ou na <b>pilha de muros</b> ao lado do tabuleiro), escolha um lugar <b>entre as casas</b> e toque em <b>✔ Colocar muro</b>. Use <b>↻ Girar</b> para deixá-lo em pé ou deitado.',
     wait: 'w',
   },
   {
@@ -279,12 +369,17 @@ const TUT_STEPS = [
     wait: 'm', only: 'diag',
   },
   {
+    text: '<b>CHEGADA:</b> chegar na última linha ainda não basta! Você precisa dar <b>mais um passo</b> para <b>passar a barreira</b> e pisar na faixa quadriculada. Clique na <b>casa verde</b> fora do tabuleiro!',
+    setup: () => { const s = newState(0); s.pawns = [{ r: 0, c: 4 }, { r: 5, c: 2 }]; return s; },
+    wait: 'm', only: 'exit',
+  },
+  {
     text: '<b>REGRA DE OURO:</b> é <b>proibido fechar totalmente</b> o caminho de alguém. Sempre tem que sobrar uma passagem! Veja: esse muro <span class="r"><b>vermelho</b></span> prenderia o adversário, então o jogo não deixa colocar.',
     setup: () => { const s = newState(0); s.pawns = [{ r: 6, c: 4 }, { r: 3, c: 0 }]; s.walls = [{ r: 2, c: 0, o: 'h', p: 0 }, { r: 3, c: 0, o: 'v', p: 0 }]; s.wallsLeft = [8, 10]; return s; },
     demo: { r: 4, c: 0, o: 'h' },
   },
   {
-    text: 'Pronto! 🎉 Dica: pense no <b>caminho mais curto</b> até a sua linha e guarde muros para a hora certa. Agora é só chamar um amigo e jogar online!',
+    text: 'Pronto! 🎉 Dica: pense no <b>caminho mais curto</b> até a barreira e guarde muros para a hora certa. Agora é só chamar um amigo e jogar online!',
     last: true,
   },
 ];
@@ -341,6 +436,7 @@ const tutorial = {
     const st = this.step();
     if (st.only === 'jump') return 'Tente o pulo: clique na casa verde!';
     if (st.only === 'diag') return 'Tente o pulo na diagonal: casa verde!';
+    if (st.only === 'exit') return 'Passe a barreira: casa verde fora do tabuleiro!';
     if (st.wait === 'w') return 'Agora coloque um muro 🧱';
     return 'Siga a instrução do tutorial';
   },
