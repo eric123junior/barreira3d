@@ -36,6 +36,24 @@ function woodTexture(base, line) {
   return t;
 }
 
+function stoneTexture() {
+  const cv = document.createElement('canvas');
+  cv.width = 256; cv.height = 64;
+  const g = cv.getContext('2d');
+  g.fillStyle = '#8d8f94'; g.fillRect(0, 0, 256, 64);
+  // Pedras arredondadas encostadas umas nas outras
+  for (let i = 0; i < 26; i++) {
+    const x = (i % 13) * 20 + (i > 12 ? 10 : 0) + Math.random() * 4, y = i > 12 ? 44 : 18;
+    const l = 105 + Math.floor(Math.random() * 60);
+    g.fillStyle = `rgb(${l},${l + 2},${l + 6})`;
+    g.beginPath(); g.ellipse(x, y, 11 + Math.random() * 3, 14 + Math.random() * 3, Math.random(), 0, Math.PI * 2); g.fill();
+    g.strokeStyle = 'rgba(40,40,45,.55)'; g.lineWidth = 2; g.stroke();
+  }
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
 function makeCharacter(color) {
   const g = new THREE.Group();
   const body = new THREE.Group();
@@ -151,11 +169,14 @@ export class GameScene {
       m.color = new THREE.Color(c).lerp(new THREE.Color(0xffffff), 0.2);
       return m;
     });
+    // Pedras: muros colocados na beira da chegada
+    this.stoneMat = new THREE.MeshStandardMaterial({ map: stoneTexture(), roughness: 0.95 });
     this.placed = new Map();   // chave -> mesh
     this.stock = [[], []];     // muros de reserva ao lado do tabuleiro
     for (let p = 0; p < 2; p++) {
       for (let i = 0; i < WALLS_PER_PLAYER; i++) {
         const m = makeWallMesh(this.wallMats[p]);
+        m.userData.owner = p;
         m.position.copy(this.stockPos(p, i));
         m.rotation.y = 0;
         scene.add(m);
@@ -393,6 +414,7 @@ export class GameScene {
       if (!mesh.parent) this.scene.add(mesh);
       mesh.userData.used = true;
       mesh.userData.key = k;
+      if (w.r === -1 || w.r === N - 1) mesh.material = this.stoneMat;
       const to = anchorPos(w.r, w.c); to.y = TOP + WALL_H / 2;
       const rotTo = w.o === 'h' ? 0 : Math.PI / 2;
       this.placed.set(k, mesh);
@@ -406,6 +428,7 @@ export class GameScene {
       if (!keys.has(k)) {
         this.placed.delete(k);
         mesh.userData.used = false;
+        mesh.material = this.wallMats[mesh.userData.owner ?? 0];
       }
     }
     // Recoloca reservas não usadas
@@ -477,8 +500,9 @@ export class GameScene {
     if (!this.raycaster.ray.intersectPlane(this.plane, hit)) return null;
     const fc = hit.x / S + 4, fr = hit.z / S + 4;
     const r = Math.round(fr), c = Math.round(fc);
-    const inBoard = fr > -0.6 && fr < N - 0.4 && fc > -0.6 && fc < N - 0.4;
-    const ar = Math.min(N - 2, Math.max(0, Math.round(fr - 0.5)));
+    // Inclui a beira das linhas de chegada (onde vão as pedras)
+    const inBoard = fr > -0.95 && fr < N - 0.05 && fc > -0.6 && fc < N - 0.4;
+    const ar = Math.min(N - 1, Math.max(-1, Math.round(fr - 0.5)));
     const ac = Math.min(N - 2, Math.max(0, Math.round(fc - 0.5)));
     // Orientação sugerida: perto de qual sulco o ponteiro está
     const dr = Math.abs(fr - (ar + 0.5)), dc = Math.abs(fc - (ac + 0.5));

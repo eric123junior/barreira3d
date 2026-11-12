@@ -1,5 +1,5 @@
 // Robô adversário: escolhe entre andar e colocar muros avaliando os caminhos mais curtos.
-import { N, DIRS, wallSet, isBlocked, pawnMoves, checkWall, applyAction, goalRow, exitRow, pathLength } from './rules.js';
+import { N, DIRS, wallSet, isBlocked, exitOpen, pawnMoves, checkWall, applyAction, goalRow, pathLength } from './rules.js';
 import { searchBest } from './engine.js';
 
 // Caminho mais curto (lista de casas) até a linha de chegada, ignorando peões.
@@ -13,7 +13,7 @@ function shortestPath(ws, from, target) {
     const nq = [];
     for (const id of q) {
       const r = Math.floor(id / N), c = id % N;
-      if (r === target) {
+      if (r === target && exitOpen(ws, r, c, target)) {
         const path = [];
         for (let x = id; x !== -1; x = prev[x]) path.push({ r: Math.floor(x / N), c: x % N });
         return path.reverse();
@@ -37,7 +37,7 @@ function candidateWalls(s, victim, maxSteps = 6) {
   const path = shortestPath(ws, s.pawns[victim], goalRow(victim));
   const out = new Map();
   const add = (o, r, c) => {
-    if (r < 0 || r > N - 2 || c < 0 || c > N - 2) return;
+    if (r < -1 || r > N - 1 || c < 0 || c > N - 2) return;
     out.set(o + r + ',' + c, { k: 'w', o, r, c });
   };
   if (path) {
@@ -51,6 +51,12 @@ function candidateWalls(s, victim, maxSteps = 6) {
         add('v', a.r, c); add('v', a.r - 1, c);
       }
     }
+  }
+  // Pedras na beira da chegada, bloqueando a saída
+  if (path) {
+    const last = path[path.length - 1];
+    const er = goalRow(victim) === 0 ? -1 : N - 1;
+    add('h', er, last.c); add('h', er, last.c - 1);
   }
   // Muros logo à frente do peão
   const p = s.pawns[victim];
@@ -94,7 +100,8 @@ function bestBy(list, score) {
 
 export function chooseAction(s, me, level = 'medio') {
   // Já está na última linha: passa a barreira e vence
-  if (s.pawns[me].r === goalRow(me)) return { k: 'm', r: exitRow(me), c: s.pawns[me].c };
+  const exit = pawnMoves(s, me).find(m => m.kind === 'exit');
+  if (exit) return { k: 'm', r: exit.r, c: exit.c };
   // Níveis fortes usam o motor de busca
   if (level === 'impossivel') return searchBest(s, me, 3000, 10);
   if (level === 'dificil') return searchBest(s, me, 1000, 4);

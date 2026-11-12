@@ -132,8 +132,14 @@ function setTool(t) {
 }
 function rotate() {
   app.orient = app.orient === 'h' ? 'v' : 'h';
-  if (app.pending) app.pending = { ...app.pending, o: app.orient };
+  if (app.pending) app.pending = wallAt(app.pending.r, app.pending.c, app.orient);
   refresh();
+}
+
+// Muro na âncora (r,c). Deitado pode ir na beira da chegada (pedra, r = -1 ou 8); em pé só dentro do tabuleiro.
+function wallAt(r, c, o) {
+  r = o === 'h' ? Math.min(8, Math.max(-1, r)) : Math.min(7, Math.max(0, r));
+  return { k: 'w', r, c: Math.min(7, Math.max(0, c)), o };
 }
 
 function wallCheck(w) {
@@ -151,7 +157,7 @@ function updateGhost(pick) {
   if (tutorial.active() && tutorial.step()?.demo) return;
   if (app.pending) { showPending(); return; }
   if (!pick || !canAct() || app.tool !== 'wall' || !pick.inBoard) { scene.showGhost(null); return; }
-  const w = { k: 'w', r: pick.anchor.r, c: pick.anchor.c, o: app.orient };
+  const w = wallAt(pick.anchor.r, pick.anchor.c, app.orient);
   scene.showGhost(w, wallCheck(w).ok);
 }
 
@@ -199,7 +205,7 @@ function nudgeWall(dr, dc) {
   if (scene.view === 1) { dr = -dr; dc = -dc; }
   const p = app.pending;
   if (!p) { choosePending({ k: 'w', r: 3, c: 3, o: app.orient }); return; }
-  choosePending({ ...p, r: Math.min(7, Math.max(0, p.r + dr)), c: Math.min(7, Math.max(0, p.c + dc)) });
+  choosePending(wallAt(p.r + dr, p.c + dc, p.o));
 }
 
 // ---------- Ações ----------
@@ -293,7 +299,7 @@ canvas.addEventListener('pointerup', e => {
     doAction({ k: 'm', r: m.r, c: m.c });
   } else {
     if (!pick.inBoard) return;
-    const w = { k: 'w', r: pick.anchor.r, c: pick.anchor.c, o: app.orient };
+    const w = wallAt(pick.anchor.r, pick.anchor.c, app.orient);
     choosePending(w);
     const chk = wallCheck(w);
     if (!chk.ok) { sfx.bad(); toast(chk.reason, true); }
@@ -331,7 +337,8 @@ $('btnExit').onclick = () => {
 
 // ---------- Robô simples (usado no tutorial) ----------
 function botMove(s, p) {
-  if (s.pawns[p].r === goalRow(p)) return { k: 'm', r: exitRow(p), c: s.pawns[p].c };
+  const exit = pawnMoves(s, p).find(m => m.kind === 'exit');
+  if (exit) return { k: 'm', r: exit.r, c: exit.c };
   const ws = wallSet(s.walls);
   let best = null, bestD = 1e9;
   for (const m of pawnMoves(s, p, ws)) {
@@ -369,7 +376,7 @@ const TUT_STEPS = [
     wait: 'm', only: 'diag',
   },
   {
-    text: '<b>CHEGADA:</b> chegar na última linha ainda não basta! Você precisa dar <b>mais um passo</b> para <b>passar a barreira</b> e pisar na faixa quadriculada. Clique na <b>casa verde</b> fora do tabuleiro!',
+    text: '<b>CHEGADA:</b> chegar na última linha ainda não basta! Você precisa dar <b>mais um passo</b> para <b>passar a barreira</b> e pisar na faixa quadriculada. Cuidado: na beira da chegada dá para colocar <b>pedras</b> (um muro deitado) para tapar a saída do adversário! Clique na <b>casa verde</b> fora do tabuleiro.',
     setup: () => { const s = newState(0); s.pawns = [{ r: 0, c: 4 }, { r: 5, c: 2 }]; return s; },
     wait: 'm', only: 'exit',
   },

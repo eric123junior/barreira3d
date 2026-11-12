@@ -1,6 +1,7 @@
 // Regras do jogo (tabuleiro 9x9, 2 jogadores, 10 muros cada).
 // Casas: (r, c) com r = linha 0..8 (0 = lado de cima), c = coluna 0..8.
 // Muros: âncora (r, c) 0..7 = cruzamento entre as casas (r,c) e (r+1,c+1).
+//   Pedras na beira da chegada: muro 'h' com r = -1 (antes da linha 0) ou r = 8 (depois da linha 8).
 //   'h' (horizontal) bloqueia a passagem entre as linhas r e r+1 nas colunas c e c+1.
 //   'v' (vertical)   bloqueia a passagem entre as colunas c e c+1 nas linhas r e r+1.
 
@@ -44,6 +45,14 @@ export function wallSet(walls) {
   return s;
 }
 
+// Muro na beira da chegada (pedra)?
+export const isEdgeRow = r => r === -1 || r === N - 1;
+
+// A saída da casa (r,c) pela barreira da linha "target" está livre?
+export function exitOpen(ws, r, c, target) {
+  return !isBlocked(ws, r, c, target === 0 ? -1 : 1, 0);
+}
+
 // Existe muro impedindo ir de (r,c) para (r+dr, c+dc)?
 export function isBlocked(ws, r, c, dr, dc) {
   if (dr === 1) return ws.has(key('h', r, c)) || ws.has(key('h', r, c - 1));
@@ -57,7 +66,7 @@ export function isBlocked(ws, r, c, dr, dc) {
 export function pawnMoves(s, p, ws = wallSet(s.walls)) {
   const me = s.pawns[p], op = s.pawns[1 - p];
   const out = [];
-  if (me.r === goalRow(p)) out.push({ r: exitRow(p), c: me.c, kind: 'exit' });
+  if (me.r === goalRow(p) && exitOpen(ws, me.r, me.c, goalRow(p))) out.push({ r: exitRow(p), c: me.c, kind: 'exit' });
   for (const [dr, dc] of DIRS) {
     const r = me.r + dr, c = me.c + dc;
     if (!inside(r, c) || isBlocked(ws, me.r, me.c, dr, dc)) continue;
@@ -80,7 +89,7 @@ export function pawnMoves(s, p, ws = wallSet(s.walls)) {
   return out;
 }
 
-// Menor distância (em passos, ignorando peões) até a linha de chegada; -1 se não houver caminho.
+// Menor distância (em passos, ignorando peões) até uma casa da linha de chegada com saída livre; -1 se não houver.
 export function pathLength(ws, from, target) {
   const seen = new Uint8Array(N * N);
   let q = [[from.r, from.c]], d = 0;
@@ -88,7 +97,7 @@ export function pathLength(ws, from, target) {
   while (q.length) {
     const nq = [];
     for (const [r, c] of q) {
-      if (r === target) return d;
+      if (r === target && exitOpen(ws, r, c, target)) return d;
       for (const [dr, dc] of DIRS) {
         const nr = r + dr, nc = c + dc;
         if (!inside(nr, nc) || seen[nr * N + nc] || isBlocked(ws, r, c, dr, dc)) continue;
@@ -104,7 +113,8 @@ export function pathLength(ws, from, target) {
 // Verifica se um muro pode ser colocado. Retorna { ok, reason }.
 export function checkWall(s, p, w) {
   if (s.wallsLeft[p] <= 0) return { ok: false, reason: 'Você não tem mais muros.' };
-  if (w.r < 0 || w.r > N - 2 || w.c < 0 || w.c > N - 2) return { ok: false, reason: 'Fora do tabuleiro.' };
+  const minR = w.o === 'h' ? -1 : 0, maxR = w.o === 'h' ? N - 1 : N - 2;
+  if (w.r < minR || w.r > maxR || w.c < 0 || w.c > N - 2) return { ok: false, reason: 'Fora do tabuleiro.' };
   const ws = wallSet(s.walls);
   if (ws.has(key('h', w.r, w.c)) || ws.has(key('v', w.r, w.c))) return { ok: false, reason: 'Já existe um muro aqui.' };
   if (w.o === 'h' && (ws.has(key('h', w.r, w.c - 1)) || ws.has(key('h', w.r, w.c + 1))))

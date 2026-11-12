@@ -13,11 +13,11 @@ const goalRow = p => (p === 0 ? 0 : N - 1);
 const STEP = [-N, N, -1, 1];
 
 // Números aleatórios fixos para o "hash" da posição
-const ZW = new Int32Array(128), ZP = new Int32Array(2 * NN), ZT = 0x5bd1e995;
+const ZW = new Int32Array(144), ZP = new Int32Array(2 * NN), ZT = 0x5bd1e995;
 {
   let x = 2463534242;
   const rnd = () => { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; return x | 0; };
-  for (let i = 0; i < 128; i++) ZW[i] = rnd();
+  for (let i = 0; i < 144; i++) ZW[i] = rnd();
   for (let i = 0; i < 2 * NN; i++) ZP[i] = rnd();
 }
 
@@ -28,6 +28,9 @@ class Board {
     this.right = new Uint8Array(NN);
     this.hA = new Uint8Array(M * M);
     this.vA = new Uint8Array(M * M);
+    // Pedras na beira da chegada: exitBlk[p][c] bloqueia a saída do jogador p pela coluna c
+    this.exitBlk = [new Uint8Array(N), new Uint8Array(N)];
+    this.eA = [new Uint8Array(M), new Uint8Array(M)];
     this.pos = [state.pawns[0].r * N + state.pawns[0].c, state.pawns[1].r * N + state.pawns[1].c];
     this.wl = [...state.wallsLeft];
     this.turn = me;
@@ -38,13 +41,25 @@ class Board {
   }
 
   setWall(o, r, c, v) {
-    const i = r * N + c, s = v ? 1 : -1;
+    const s = v ? 1 : -1;
+    if (o === 'h' && (r === -1 || r === N - 1)) {
+      const e = r === -1 ? 0 : 1;
+      this.exitBlk[e][c] += s; this.exitBlk[e][c + 1] += s; this.eA[e][c] = v;
+      this.hash ^= ZW[128 + e * M + c];
+      return;
+    }
+    const i = r * N + c;
     if (o === 'h') { this.down[i] += s; this.down[i + 1] += s; this.hA[r * M + c] = v; }
     else { this.right[i] += s; this.right[i + N] += s; this.vA[r * M + c] = v; }
     this.hash ^= ZW[(o === 'h' ? 0 : 64) + r * M + c];
   }
 
   wallFits(o, r, c) {
+    if (o === 'h' && (r === -1 || r === N - 1)) {
+      if (c < 0 || c >= M) return false;
+      const e = this.eA[r === -1 ? 0 : 1];
+      return !e[c] && !(c > 0 && e[c - 1]) && !(c < M - 1 && e[c + 1]);
+    }
     if (r < 0 || r >= M || c < 0 || c >= M) return false;
     const a = r * M + c;
     if (this.hA[a] || this.vA[a]) return false;
@@ -72,7 +87,7 @@ class Board {
     d[from] = 0; q[t++] = from;
     while (h < t) {
       const i = q[h++];
-      if (((i / N) | 0) === goal) return d[i];
+      if (((i / N) | 0) === goal && !this.exitBlk[p][i % N]) return d[i];
       const nd = d[i] + 1;
       if (i >= N && !this.down[i - N] && d[i - N] < 0) { d[i - N] = nd; q[t++] = i - N; }
       if (i < NN - N && !this.down[i] && d[i + N] < 0) { d[i + N] = nd; q[t++] = i + N; }
@@ -88,7 +103,7 @@ class Board {
     const d = new Int16Array(NN).fill(-1), q = this.queue;
     const goal = goalRow(p);
     let h = 0, t = 0;
-    for (let c = 0; c < N; c++) { d[goal * N + c] = 0; q[t++] = goal * N + c; }
+    for (let c = 0; c < N; c++) if (!this.exitBlk[p][c]) { d[goal * N + c] = 0; q[t++] = goal * N + c; }
     while (h < t) {
       const i = q[h++];
       const nd = d[i] + 1;
@@ -170,6 +185,8 @@ class Search {
       const next = [];
       for (const i of frontier) {
         const r = (i / N) | 0, c = i % N;
+        // Na linha de chegada: pedra tapando a saída
+        if (dQ[i] === 0) { const er = q === 0 ? -1 : N - 1; add('h', er, c); add('h', er, c - 1); }
         for (let dir = 0; dir < 4; dir++) {
           if (!b.open(i, dir)) continue;
           const j = i + STEP[dir];
@@ -246,8 +263,10 @@ class Search {
     if (ply > 0) {
       // Quem está na última linha passa a barreira na sua vez (ninguém consegue impedir)
       const t = b.turn;
-      if (((b.pos[t] / N) | 0) === goalRow(t)) return WIN - ply;
-      if (((b.pos[1 - t] / N) | 0) === goalRow(1 - t)) return -(WIN - ply - 1);
+      const atExit = pl => ((b.pos[pl] / N) | 0) === goalRow(pl) && !b.exitBlk[pl][b.pos[pl] % N];
+      if (atExit(t)) return WIN - ply;
+      // Adversário na saída e eu sem pedras/muros para tapar: ele passa na próxima
+      if (atExit(1 - t) && b.wl[t] === 0) return -(WIN - ply - 1);
     }
     if (depth === 0) return this.evaluate();
     const alpha0 = alpha;
