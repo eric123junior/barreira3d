@@ -52,7 +52,7 @@ function candidateWalls(s, victim, maxSteps = 6) {
       }
     }
   }
-  // Pedras na beira da chegada, bloqueando a saída
+  // Muros na beira da chegada, tapando a saída
   if (path) {
     const last = path[path.length - 1];
     const er = goalRow(victim) === 0 ? -1 : N - 1;
@@ -103,6 +103,8 @@ export function chooseAction(s, me, level = 'medio') {
   const exit = pawnMoves(s, me).find(m => m.kind === 'exit');
   if (exit) return { k: 'm', r: exit.r, c: exit.c };
   // Níveis fortes usam o motor de busca
+  // Insano: além de pensar mais, confere os muros mais perigosos no fim de cada linha de jogo
+  if (level === 'insano') return searchBest(s, me, 5000, 16, { qdepth: 1 });
   if (level === 'impossivel') return searchBest(s, me, 3000, 10);
   if (level === 'dificil') return searchBest(s, me, 1000, 4);
 

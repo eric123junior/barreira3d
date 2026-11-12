@@ -32,6 +32,12 @@ button.ghost { background: #eef2f8; }
 button.level[data-level="facil"] { background: #c9f2c4; }
 button.level[data-level="medio"] { background: #ffe9a8; }
 button.level[data-level="dificil"] { background: #ffc4bd; }
+button.level[data-level="insano"] {
+  background: linear-gradient(135deg, #000, #3a0000 60%, #8a0000); color: #ffd84a; letter-spacing: 2px;
+  box-shadow: 0 4px 0 #000, 0 0 26px rgba(255, 0, 0, .7); animation: pulse 1.6s ease-in-out infinite;
+}
+button.level[data-level="insano"] small { letter-spacing: 0; font-size: .75rem; color: #ffb3b3; }
+@keyframes pulse { 50% { box-shadow: 0 4px 0 #000, 0 0 40px rgba(255, 30, 30, .95); } }
 button.level[data-level="impossivel"] {
   background: linear-gradient(135deg, #2b1033, #6b0f1a); color: #fff; letter-spacing: 1px;
   box-shadow: 0 4px 0 #1a0510, 0 0 18px rgba(255, 40, 60, .45);

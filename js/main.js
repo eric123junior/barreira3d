@@ -118,7 +118,7 @@ function refresh() {
   if (mine && app.tool === 'move') hint = isTouch ? 'Toque numa casa brilhante para andar • toque na pilha de muros para pegar um muro'
     : 'Clique numa casa brilhante ou use as setas ⬆⬇⬅➡ • clique na pilha de muros para pegar um';
   if (!mine && app.mode === 'online' && s.winner < 0) hint = 'Aguardando a jogada do oponente…';
-  if (!mine && app.mode === 'bot' && s.winner < 0) hint = '🤖 O Robô está pensando…';
+  if (!mine && app.mode === 'bot' && s.winner < 0) hint = bot.level === 'insano' ? '☠️ O Robô INSANO está calculando tudo…' : '🤖 O Robô está pensando…';
   $('hint').textContent = hint;
 }
 
@@ -136,7 +136,7 @@ function rotate() {
   refresh();
 }
 
-// Muro na âncora (r,c). Deitado pode ir na beira da chegada (pedra, r = -1 ou 8); em pé só dentro do tabuleiro.
+// Muro na âncora (r,c). Deitado pode ir na beira da chegada (r = -1 ou 8); em pé só dentro do tabuleiro.
 function wallAt(r, c, o) {
   r = o === 'h' ? Math.min(8, Math.max(-1, r)) : Math.min(7, Math.max(0, r));
   return { k: 'w', r, c: Math.min(7, Math.max(0, c)), o };
@@ -376,7 +376,7 @@ const TUT_STEPS = [
     wait: 'm', only: 'diag',
   },
   {
-    text: '<b>CHEGADA:</b> chegar na última linha ainda não basta! Você precisa dar <b>mais um passo</b> para <b>passar a barreira</b> e pisar na faixa quadriculada. Cuidado: na beira da chegada dá para colocar <b>pedras</b> (um muro deitado) para tapar a saída do adversário! Clique na <b>casa verde</b> fora do tabuleiro.',
+    text: '<b>CHEGADA:</b> chegar na última linha ainda não basta! Você precisa dar <b>mais um passo</b> para <b>passar a barreira</b> e pisar na faixa quadriculada. Cuidado: também dá para colocar um <b>muro deitado na beira da chegada</b> para tapar a saída do adversário! Clique na <b>casa verde</b> fora do tabuleiro.',
     setup: () => { const s = newState(0); s.pawns = [{ r: 0, c: 4 }, { r: 5, c: 2 }]; return s; },
     wait: 'm', only: 'exit',
   },
@@ -487,7 +487,7 @@ function startLocal() {
 $('btnLocal').onclick = startLocal;
 
 // ---------- Contra o robô ----------
-const LEVEL_NAMES = { facil: 'Fácil', medio: 'Médio', dificil: 'Difícil', impossivel: 'IMPOSSÍVEL' };
+const LEVEL_NAMES = { facil: 'Fácil', medio: 'Médio', dificil: 'Difícil', impossivel: 'IMPOSSÍVEL', insano: 'INSANO' };
 const bot = {
   level: 'medio', starter: 0, token: 0,
   start(level) {

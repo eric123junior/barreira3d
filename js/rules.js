@@ -1,7 +1,7 @@
 // Regras do jogo (tabuleiro 9x9, 2 jogadores, 10 muros cada).
 // Casas: (r, c) com r = linha 0..8 (0 = lado de cima), c = coluna 0..8.
 // Muros: âncora (r, c) 0..7 = cruzamento entre as casas (r,c) e (r+1,c+1).
-//   Pedras na beira da chegada: muro 'h' com r = -1 (antes da linha 0) ou r = 8 (depois da linha 8).
+//   Muros na beira da chegada (tapam a saída): muro 'h' com r = -1 (antes da linha 0) ou r = 8 (depois da linha 8).
 //   'h' (horizontal) bloqueia a passagem entre as linhas r e r+1 nas colunas c e c+1.
 //   'v' (vertical)   bloqueia a passagem entre as colunas c e c+1 nas linhas r e r+1.
 
@@ -45,7 +45,7 @@ export function wallSet(walls) {
   return s;
 }
 
-// Muro na beira da chegada (pedra)?
+// Muro na beira da chegada?
 export const isEdgeRow = r => r === -1 || r === N - 1;
 
 // A saída da casa (r,c) pela barreira da linha "target" está livre?

@@ -7,7 +7,7 @@ const WIN = 100000;
 const INF = 1e9;
 const ABORT = Symbol('abort');
 
-export const params = { wallW: 8, reserve: 6, tempo: 5, l1: 16, ln: 8, levels: 5, tt: true, sat: 3, satW: 4, repPen: 14, progress: 2, stats: false };
+export const params = { wallW: 8, reserve: 6, tempo: 5, l1: 16, ln: 8, levels: 5, tt: true, sat: 3, satW: 4, repPen: 14, progress: 2, qdepth: 0, qn: 4, qgain: 2, stats: false };
 
 const goalRow = p => (p === 0 ? 0 : N - 1);
 const STEP = [-N, N, -1, 1];
@@ -185,7 +185,7 @@ class Search {
       const next = [];
       for (const i of frontier) {
         const r = (i / N) | 0, c = i % N;
-        // Na linha de chegada: pedra tapando a saída
+        // Na linha de chegada: muro tapando a saída
         if (dQ[i] === 0) { const er = q === 0 ? -1 : N - 1; add('h', er, c); add('h', er, c - 1); }
         for (let dir = 0; dir < 4; dir++) {
           if (!b.open(i, dir)) continue;
@@ -255,6 +255,29 @@ class Search {
     return params.repPen * (this.visited.get(a.to) || 0) - params.progress * a.gain;
   }
 
+  // Ao fim da busca, ainda testa os muros mais fortes (evita ser pego de surpresa logo depois)
+  quiesce(alpha, beta, qd, ply) {
+    if ((++this.nodes & 255) === 0 && performance.now() > this.deadline) throw ABORT;
+    const b = this.b, t = b.turn;
+    const atExit = pl => ((b.pos[pl] / N) | 0) === goalRow(pl) && !b.exitBlk[pl][b.pos[pl] % N];
+    if (atExit(t)) return WIN - ply;
+    const stand = this.evaluate();
+    if (qd === 0 || b.wl[t] === 0) return stand;
+    if (stand >= beta) return stand;
+    if (stand > alpha) alpha = stand;
+    let best = stand;
+    for (const w of this.wallCandidates(t, params.qn, 99, false)) {
+      if (w.gain < params.qgain) break;
+      this.make(w);
+      const v = -this.quiesce(-beta, -alpha, qd - 1, ply + 1);
+      this.unmake(w);
+      if (v > best) best = v;
+      if (v > alpha) alpha = v;
+      if (alpha >= beta) break;
+    }
+    return best;
+  }
+
   same(a, x) { return a.k === x.k && (a.k === 'm' ? a.to === x.to : a.o === x.o && a.r === x.r && a.c === x.c); }
 
   negamax(depth, alpha, beta, ply, rootOrder) {
@@ -265,10 +288,10 @@ class Search {
       const t = b.turn;
       const atExit = pl => ((b.pos[pl] / N) | 0) === goalRow(pl) && !b.exitBlk[pl][b.pos[pl] % N];
       if (atExit(t)) return WIN - ply;
-      // Adversário na saída e eu sem pedras/muros para tapar: ele passa na próxima
+      // Adversário na saída e eu sem muros para tapar: ele passa na próxima
       if (atExit(1 - t) && b.wl[t] === 0) return -(WIN - ply - 1);
     }
-    if (depth === 0) return this.evaluate();
+    if (depth === 0) return params.qdepth ? this.quiesce(alpha, beta, params.qdepth, ply) : this.evaluate();
     const alpha0 = alpha;
     const k = ply > 0 ? this.key() : 0;
     let ttMove = null;
@@ -313,7 +336,13 @@ function toAction(a) {
 }
 
 // Escolhe a melhor ação para "me" pensando até timeMs milissegundos (ou até maxDepth jogadas).
-export function searchBest(state, me, timeMs = 1500, maxDepth = 12) {
+export function searchBest(state, me, timeMs = 1500, maxDepth = 12, opts = null) {
+  // Ajustes temporários (ex.: o nível Insano olha mais muros por jogada)
+  if (opts) {
+    const saved = { ...params };
+    Object.assign(params, opts);
+    try { return searchBest(state, me, timeMs, maxDepth); } finally { Object.assign(params, saved); }
+  }
   const t0 = performance.now();
   const s = new Search(state, me, t0 + timeMs);
   let order = s.actions(0);
